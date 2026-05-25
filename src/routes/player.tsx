@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 import { BackgroundFX } from "@/components/BackgroundFX";
 import { supabase } from "@/integrations/supabase/client";
-import { signInWithGoogleToken } from "@/lib/google-auth";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/player")({
@@ -93,9 +92,19 @@ function PlayerAuth() {
     onSuccess: async ({ access_token }) => {
       setLoading(true);
       try {
-        // Exchange the Google access token for a Supabase session (server-side)
-        const { token_hash } = await signInWithGoogleToken({ data: { accessToken: access_token } });
-        const { error } = await supabase.auth.verifyOtp({ token_hash, type: "magiclink" });
+        // Exchange the Google access token for a Supabase session via API route
+        const res = await fetch("/api/google-auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken: access_token }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Google sign-in failed");
+
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: data.token_hash,
+          type: "magiclink",
+        });
         if (error) throw error;
         toast.success("Signed in with Google!");
         // onAuthStateChange will fire SIGNED_IN and navigate to /player_registration
